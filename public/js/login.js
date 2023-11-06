@@ -38,3 +38,11 @@ function login() {
 }
 
 loginBtn.addEventListener("click", login);
+
+
+function fetchNewMessages() {
+  getMessages(); // Call your getMessages function to fetch new messages
+}
+
+// Call fetchNewMessages every 1 second (1000 milliseconds)
+const messageFetchInterval = setInterval(fetchNewMessages, 1000);
