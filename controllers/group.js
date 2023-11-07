@@ -7,8 +7,10 @@ const { Op } = require("sequelize");
 exports.createGroup = async (req, res, next) => {
   try {
     const groupName = req.body.groupName;
+    const admin = req.user.name;
     const members = req.body.members;
 
+    const group = await Group.create({ name: groupName, admin: admin });
 
     const invitedMembers = await User.findAll({
       where: {
@@ -22,6 +24,7 @@ exports.createGroup = async (req, res, next) => {
       await Promise.all(
         invitedMembers.map(async (user) => {
           const response = await UserGroup.create({
+            isadmin: false,
             userId: user.dataValues.id,
             groupId: group.dataValues.id,
           });
@@ -29,6 +32,7 @@ exports.createGroup = async (req, res, next) => {
       );
 
       await UserGroup.create({
+        isadmin: true,
         userId: req.user.id,
         groupId: group.dataValues.id,
       });
@@ -47,6 +51,11 @@ exports.addToGroup = async (req, res, next) => {
 
     const group = await Group.findOne({ where: { name: groupName } });
     if (group) {
+      const admin = await UserGroup.findOne({
+        where: {
+          [Op.and]: [{ isadmin: 1 }, { groupId: group.id }],
+        },
+      });
       if (admin.userId == req.user.id) {
         const invitedMembers = await User.findAll({
           where: {
@@ -55,14 +64,32 @@ exports.addToGroup = async (req, res, next) => {
             },
           },
         });
+
+        await Promise.all(
+          invitedMembers.map(async (user) => {
+            const response = await UserGroup.create({
+              isadmin: false,
+              userId: user.dataValues.id,
+              groupId: group.dataValues.id,
+            });
+          })
+        );
+        res.status(201).json({ message: "Members Added Successfully!" });
+      } else {
+        res.status(201).json({ message: "Only Admins Can Add New Members" });
+      }
+    } else {
+      res.status(201).json({ message: "Group doesn't exists!" });
     }
-}
+  } catch (error) {
+    console.log(error);
   }
 };
 
 exports.getGroups = async (req, res, next) => {
   try {
     const groups = await Group.findAll({
+      attributes: ["name", "admin"],
       include: [
         {
           model: UserGroup,
@@ -71,6 +98,54 @@ exports.getGroups = async (req, res, next) => {
       ],
     });
     res.status(200).json({ groups: groups });
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+exports.deleteFromGroup = async (req, res, next) => {
+  try {
+    const groupName = req.body.groupName;
+    const members = req.body.members;
+
+    const group = await Group.findOne({ where: { name: groupName } });
+    if (group) {
+      const admin = await UserGroup.findOne({
+        where: {
+          [Op.and]: [{ isadmin: 1 }, { groupId: group.id }],
+        },
+      });
+      if (admin.userId == req.user.id) {
+        const invitedMembers = await User.findAll({
+          where: {
+            email: {
+              [Op.or]: members,
+            },
+          },
+        });
+
+        await Promise.all(
+          invitedMembers.map(async (user) => {
+            const response = await UserGroup.destroy({
+              where: {
+                [Op.and]: [
+                  {
+                    isadmin: false,
+                    userId: user.dataValues.id,
+                    groupId: group.dataValues.id,
+                  },
+                ],
+              },
+            });
+          })
+        );
+        res.status(201).json({ message: "Members Deleted Successfully!" });
+      } else {
+        res.status(201).json({ message: "Only Admins Can Delete Members" });
+      }
+    } else {
+      res.status(201).json({ message: "Group doesn't exists!" });
+    }
   } catch (error) {
     console.log(error);
   }
@@ -98,4 +173,4 @@ exports.groupMembers = async (req, res, next) => {
   } catch (error) {
     console.log(error);
   }
-}
+};
